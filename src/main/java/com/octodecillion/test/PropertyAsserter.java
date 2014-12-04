@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * @author Josef Betancourt
  */
 @SuppressWarnings("rawtypes")
-enum PropertyAsserter {
+public enum PropertyAsserter {
     INSTANCE;
 
 	private static final Logger log = LoggerFactory.getLogger(PropertyAsserter.class);
@@ -166,7 +166,21 @@ enum PropertyAsserter {
                 }else if (TYPE_ARGUMENTS.containsKey(type)) {
                     arg = TYPE_ARGUMENTS.get(type);
                 }else {
-                    arg = invokeDefaultConstructorEvenIfPrivate(type);
+ 					try {
+ 		               	Constructor<?> constructor = findDefaultConstructor(type);
+ 						if (constructor == null) {
+ 							return;
+ 						}
+
+						arg = invokeDefaultConstructorEvenIfPrivate(type);
+					} catch (Exception e) {
+						arg = null;
+					}
+
+					if (arg == null) {
+						return;
+					}  
+                    
                 }
             }
 
@@ -209,6 +223,23 @@ enum PropertyAsserter {
 		    assertSame(property + " getter/setter failed test", arg, propertyValue);
 		}
 	}
+	
+	/**
+	 * Finds the constructor corresponding with the given parameter types.
+	 * <p/>
+	 * 
+	 * @param clazz what is the class type
+	 * @param parameterTypes the parameters to check
+	 * @return a constructor, if one can be found, else null
+	 */
+	public static Constructor<?> findDefaultConstructor(Class<?> clazz, Class<?>... parameterTypes) {
+		try {
+			final Constructor<?> constructor = clazz.getDeclaredConstructor(parameterTypes);
+			return constructor;
+		} catch (NoSuchMethodException e) {
+			return null;
+		}
+	}	
 
 	/**
 	 * Create object using constructor via reflection.
@@ -298,12 +329,15 @@ enum PropertyAsserter {
             PropertyDescriptor[] descriptors = beanInfo.getPropertyDescriptors();
             
             for (PropertyDescriptor descriptor : descriptors) {
-                if (descriptor.getWriteMethod() == null) {
+                if (descriptor.getWriteMethod() == null || (descriptor.getReadMethod() == null) ) {
+                	log.debug("property, '{}' does not have both getter and setter.", descriptor.getDisplayName());
                     continue;
                 }
                 if (!blacklist.contains(descriptor.getDisplayName())) {
                     assertBasicGetterSetterBehavior(target, descriptor.getDisplayName());
-                }
+                }else {
+					log.debug("skipping property: '{}'",descriptor.getDisplayName());
+				}
             }
         }catch (IntrospectionException e) {
             fail("Failed while introspecting target " + target.getClass());
